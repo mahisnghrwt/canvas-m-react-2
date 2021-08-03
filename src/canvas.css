@@ -1,0 +1,85 @@
+#canvas-layer {
+	border: 1px solid red;
+	position: relative;
+}
+
+#interactive-layer {
+	height: 100%;
+	width: 100%;
+	position: absolute;
+	top: 0;
+	left: 0;
+	border:1px solid blue;
+}
+
+#svg-layer {
+	height: 100%;
+	width: 100%;
+}
+
+.vertical-scale {
+	display: flex;
+	flex-direction: column;
+	/* // border-bottom: 0.1px red solid; */
+
+}
+
+.vertical-scale div {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+
+
+.horizontal-scale {
+	border: 1px red solid;
+	display: flex;
+	flex-direction: row;
+	width: fit-content;
+}
+
+.horizontal-scale div span{
+	font-size: 0.75rem;
+}
+
+.epic-left-tip, .epic-right-tip {
+	position: absolute;
+	left: -0.25rem;
+	top: 50%;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background-color: #ff7979;
+	opacity: 0.5;
+}
+
+.epic-right-tip {
+	left: auto;
+	right: -0.25rem;
+}
+
+.epic-left-tip:hover, .epic-right-tip:hover {
+	opacity: 1;
+	background-color: #eb4d4b;
+}
+
+.epic-resize-left-handle, .epic-resize-right-handle {
+	background-color: #f6e58d;
+	position: absolute;
+	left: 0;
+	top: 0;
+	opacity: 0.5;
+}	
+
+.epic-resize-right-handle {
+	position: absolute;
+	left: auto;
+	right: 0;
+	top: 0;
+	opacity: 0.5;
+}	
+
+.epic-resize-left-handle:hover, .epic-resize-right-handle:hover {
+	opacity: 1;
+	background-color: #f9ca24;
+}
