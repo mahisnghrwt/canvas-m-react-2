@@ -8,23 +8,27 @@ import { differenceInDays } from "date-fns/esm";
 import { add } from "date-fns";
 import {pixelToGridBasedPos__} from "./canvasHelper";
 import Path from "./components/Path";
+import Vector2 from "./classes/Vector2"
 
 const GRIDLINE_COLOR = "#bdc3c7";
 const GRIDLINE_SIZE_IN_PX = 1;
 const VERTICAL_SCALE_WIDTH = 100;
 const HORIZONTAL_SCALE_HEIGHT = 20;
 
+const INTERACTIVE_LAYER_CLASS_NAME = "interactive-layer";
+const EPIC_CLASS_NAME = "epic";
+
 let id = 1;
 const getId__ = () => {
 	return id++;
 }
 
-const getGridlinesCss__ = (nodeDimensions, gridlineSize, gridlineColor)  => {
+const generateGridlinesCss = (nodeDimensions, gridlineWidth, gridlineColor)  => {
 	const verticalGirdlinesCss = `repeating-linear-gradient(
 	to right, 
 	${gridlineColor} 0 1px,
-	transparent 1px ${nodeDimensions.width - gridlineSize}px, 
-	${gridlineColor} ${nodeDimensions.width - gridlineSize}px ${nodeDimensions.width}px)`;
+	transparent 1px ${nodeDimensions.width - gridlineWidth}px, 
+	${gridlineColor} ${nodeDimensions.width - gridlineWidth}px ${nodeDimensions.width}px)`;
 
 	const horizontalGridlinesCss = `repeating-linear-gradient(
 	to bottom, 
@@ -113,12 +117,71 @@ const _reducer = (state, action) => {
 	}
 }
 
+/**
+ * NOTE - Must be wrapped in try-catch block, incase argument is not synthetic event.
+ */
+const epicEventPosToCanvas = (e) => {
+	if (e.target.className !== EPIC_CLASS_NAME) {
+		return null;
+	}
+
+	if (e.target.parentElement !== INTERACTIVE_LAYER_CLASS_NAME) {
+		throw new Error("Epic element must be inside interactive-layer element!");
+	}
+
+	const pos = new Vector2(e.target.offsetX, e.target.offsetY);
+
+	pos.x += e.target.offsetLeft;
+	pos.y += e.target.offsetTop;
+
+	return pos;
+}
+
+const gridToDate = (date, offset) => {
+	if (!(date instanceof Date))
+		return null;
+
+	if (typeof offset !== "number")
+		return null;
+
+	return add(date, {days: offset});
+}
+
+const createEpic = (pos, refDate, canvasSize, grids) => {
+	// this can be dynamic, so we will store color in database as string ?!
+	const defaultColor = "#7ed6df";
+
+	const gridPos = pixelToGridBasedPos__(pos, canvasSize, grids);
+
+	const startDate = gridToDate(refDate, gridPos.x);
+	const endDate = gridToDate(refDate, gridPos.x + 1);
+
+	if (startDate == null || endDate == null)
+		return null;
+
+
+	const epic = {
+		color: defaultColor,
+		startDate,
+		endDate,
+		row: gridPos.y,
+		id: getId__()
+	}
+
+	return epic;
+}
+
+
 const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 	// grid size
 	// this should be a function thar returns grid dimensions
 	const numOfUnits = {
 		x: differenceInDays(endDate, startDate),
 		y: rows
+	}
+
+	const grids = {
+		...numOfUnits
 	}
 
 	// canvas size is dependant on BASE_NODE_DIMENSIONS
@@ -134,34 +197,18 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 
 	const interactiveLayerDoubleClickHandler = (e) => {
 		e.preventDefault();
-		// position is relative to canvas
-		createEpic({x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY}, startDate);
-	}
 
-	/**
-	 * 
-	 * @param {{x: number, y: number}} pos Raw position on canvas
-	 * @param {Date} startDate_ Start date of canvas
-	 */
-	// convert into pure function
-	// return epic object
-	const createEpic = (pos, startDate_) => {
-		// this can be dynamic, so we will store color in database as string ?!
-		const defaultColor = "#7ed6df";
+		// We can only create epic on top of "interactive-layer"
+		if (e.target.className !== INTERACTIVE_LAYER_CLASS_NAME)
+			return;
 
-		const gridBasedPos = pixelToGridBasedPos__(pos, canvasSize, numOfUnits);
+		const pos = {x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY};
 
-		const epic = {
-			color: defaultColor,
-			startDate: add(startDate_, {days: gridBasedPos.x}),
-			endDate: add(startDate_, {days: gridBasedPos.x + 1}),
-			row: gridBasedPos.y,
-			id: getId__()
-		}
+		const epic = createEpic(pos, startDate, canvasSize, numOfUnits);
 
-		// NOTE -> this function should just return the epic object
+		if (epic == null)
+			return;
 
-		// NOTE -> call api
 		dispatch({type: "ADD_EPIC", epic});
 	}
 
@@ -380,7 +427,7 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 					position: "absolute",
 					left: `${VERTICAL_SCALE_WIDTH}px`,
 					top: `${HORIZONTAL_SCALE_HEIGHT}px`,
-					backgroundImage: getGridlinesCss__(BASE_NODE_DIMENSIONS, GRIDLINE_SIZE_IN_PX, GRIDLINE_COLOR)
+					backgroundImage: generateGridlinesCss(BASE_NODE_DIMENSIONS, GRIDLINE_SIZE_IN_PX, GRIDLINE_COLOR)
 				}}>
 
 				{/* Svg Layer */}
