@@ -373,7 +373,6 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 
 
 		const pos = {x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY};
-		const gridPos = pixelToGridBasedPos__(pos, canvasSize, numOfUnits);
 
 
 		// position is always relative to interactive-layer
@@ -382,6 +381,7 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 			pos.y += e.target.offsetTop;
 		}
 
+		const gridPos = pixelToGridBasedPos__(pos, canvasSize, numOfUnits);
 		const targetDate = gridToDate(startDate, gridPos.x);
 
 		switch(dragData.current.type) {
