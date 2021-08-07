@@ -1,6 +1,8 @@
 import {differenceInDays} from "date-fns";
 import {gridToPixelBasedPos__} from "../canvasHelper";
-import { BASE_NODE_DIMENSIONS } from "../enums";
+import { BASE_NODE_DIMENSIONS, EPIC_FACE, PATH_ENDPOINT } from "../enums";
+import Helper from "../Helper";
+
 
 
 const Epic = ({id, startDate, endDate, color, row, canvas, createPath, dragData, notifyPathEnd}) => {
@@ -27,8 +29,9 @@ const Epic = ({id, startDate, endDate, color, row, canvas, createPath, dragData,
 	const epicDragStartHandler = (e) => {
 		dragData.current = {
 			epicId: id,
-			type: "MOVE_EPIC"
+			type: Helper.dragEvents.moveEpic
 		}
+
 		e.dataTransfer.setDragImage(new Image(), 0, 0);
 	}
 
@@ -36,13 +39,13 @@ const Epic = ({id, startDate, endDate, color, row, canvas, createPath, dragData,
 		dragData.current = {};
 	}
 
-	const resizerDragStartHandler = (e, isLeftHandle) => {
+	const resizerDragStartHandler = (e, face) => {
 		e.stopPropagation();
 		e.dataTransfer.setDragImage(new Image(), 0, 0)
 		dragData.current = {
 			epicId: id,
 			type: "RESIZE_EPIC",
-			isLeftHandle
+			face
 		}
 	}
 
@@ -51,25 +54,14 @@ const Epic = ({id, startDate, endDate, color, row, canvas, createPath, dragData,
 		dragData.current = {};
 	}
 
-	const tipDragStartHandler = (e, direction) => {
+	const tipDragStartHandler = (e, rawFace) => {
 		e.stopPropagation();
 		e.dataTransfer.setDragImage(new Image(), 0, 0);
 		dragData.current = {
 			type: "DRAW_PATH"
 		}
-
-		let raw = "from"
-		if (direction === "RIGHT") {
-			raw = "to";
-		}	
-
-		const fromTo = {
-			startDate,
-			endDate,
-			row
-		}
-
-		createPath(fromTo, {...fromTo}, raw, id);
+		
+		createPath(id, rawFace);
 	}
 
 	const epicDropHandler = (e) => {
@@ -107,25 +99,25 @@ const Epic = ({id, startDate, endDate, color, row, canvas, createPath, dragData,
 			<div 
 				className="epic-left-tip"
 				draggable
-				onDragStart={e => tipDragStartHandler(e, "LEFT")}
+				onDragStart={e => tipDragStartHandler(e, PATH_ENDPOINT.HEAD)}
 				onDrag={e => e.stopPropagation()}
 				onDragEnd={tipDragEndHandler} />
 			<div 
 				className="epic-resize-left-handle" 
 				style={resizeHandleCssDimensions} 
 				draggable 
-				onDragStart={e => resizerDragStartHandler(e, true)} 
+				onDragStart={e => resizerDragStartHandler(e, EPIC_FACE.START)} 
 				onDragEnd={resizerDragEndHandler} />
 			<div 
 				className="epic-resize-right-handle" 
 				style={resizeHandleCssDimensions} 
 				draggable 
-				onDragStart={e => resizerDragStartHandler(e, false)} 
+				onDragStart={e => resizerDragStartHandler(e, EPIC_FACE.END)} 
 				onDragEnd={resizerDragEndHandler} />
 			<div 
 				className="epic-right-tip" 
 				draggable
-				onDragStart={e => tipDragStartHandler(e, "RIGHT")}
+				onDragStart={e => tipDragStartHandler(e, PATH_ENDPOINT.TAIL)}
 				onDrag={e => e.stopPropagation()}
 				onDragEnd={tipDragEndHandler} />
 		</div>

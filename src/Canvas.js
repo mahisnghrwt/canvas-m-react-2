@@ -1,6 +1,19 @@
+/*
+ *	Custom Drag Events
+ * 	==================
+ *
+ * 	Draggable Element
+ *	----------------- 
+ * 	OnDragStart => Pass drag data.
+ * 
+ * 	Droppable Element
+ * 	-----------------
+ * 	OnDrop => Clear drag data.
+ */
+
 import { useReducer, useRef } from "react";
 import "./canvas.css";
-import { BASE_NODE_DIMENSIONS, SCALE_UNIT } from "./enums";
+import { BASE_NODE_DIMENSIONS, EPIC_FACE, PATH_ENDPOINT, SCALE_UNIT } from "./enums";
 import Epic from "./components/Epic";
 import HorizontalScale from "./components/HorizontalScale";
 import VerticalScale from "./components/VerticalScale";
@@ -9,6 +22,7 @@ import { add } from "date-fns";
 import {pixelToGridBasedPos__} from "./canvasHelper";
 import Path from "./components/Path";
 import Vector2 from "./classes/Vector2"
+import Helper from "./Helper";
 
 const GRIDLINE_COLOR = "#bdc3c7";
 const GRIDLINE_SIZE_IN_PX = 1;
@@ -21,6 +35,28 @@ const EPIC_CLASS_NAME = "epic";
 let id = 1;
 const getId__ = () => {
 	return id++;
+}
+
+Date.prototype.isEqual = function(rhs) {
+	if (!(rhs instanceof Date))
+		return false;
+
+	return (this.getFullYear() === rhs.getFullYear() && this.getMonth() === rhs.getMonth()) && this.getDate() === rhs.getDate();
+}
+
+/**
+ * Use it to check if a "date" is extending over canvas endDate.
+ * @param {*} refDate 
+ * @param {*} canvasEndDate 
+ * @returns 
+ */
+const shouldExtendCanvas = (refDate, canvasEndDate) => {
+	const threshold = 1;
+	
+	if (differenceInDays(canvasEndDate, refDate) <= threshold)
+		return true;
+
+	return false;
 }
 
 const generateGridlinesCss = (nodeDimensions, gridlineWidth, gridlineColor)  => {
@@ -75,21 +111,14 @@ const _reducer = (state, action) => {
 					}
 				}
 			}
-		case "PATCH_INTERMEDIATE_PATH_RAW":
+		case "PATCH_INTERMEDIATE_PATH":
 			return {
 				...state,
 				intermediate: {
 					...state.intermediate,
 					path: {
 						...state.intermediate.path,
-						from: {
-							...state.intermediate.path.from,
-						},
-						to: {
-							...state.intermediate.path.to,
-						},
-						raw: state.intermediate.path.raw,
-						[state.intermediate.path.raw]: {
+						[state.intermediate.path.rawEndpoint]: {
 							...action.patch
 						}
 					}
@@ -184,6 +213,8 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 		...numOfUnits
 	}
 
+	const uncomittedEpic = useRef(-1);
+
 	// canvas size is dependant on BASE_NODE_DIMENSIONS
 	const canvasSize = {
 		height: BASE_NODE_DIMENSIONS.height * numOfUnits.y,
@@ -212,24 +243,34 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 		dispatch({type: "ADD_EPIC", epic});
 	}
 
-	/**
-	 * 
-	 * @param {{startDate: Date, endDate: Date}} from 
-	 * @param {{startDate: Date, endDate: Date}} to 
-	 * @param {string} raw
-	 * @param {nnumber} rawId
-	 */
-	// convert into pure function
-	// return intermediate path object
-	const createIntermediatePath = (from, to, raw, rawId) => {
-		const rawId_ = `${raw}Id`;
-		const path = {
+	const createIntermediatePath = (originEpicId, rawEndpoint) => {
+		let path = {
 			id: getId__(),
-			from,
-			to,
-			raw,
-			[rawId_]: rawId
+			originEpicId,
+			rawEndpoint
 		}
+
+		const originEpic = state.epics[originEpicId];
+		if (originEpic == null)	
+			return;
+
+		const refDate = rawEndpoint === PATH_ENDPOINT.HEAD ? originEpic.startDate : originEpic.endDate;
+
+		let placeholderEndpoint = {
+			x: differenceInDays(refDate, startDate),
+			y: originEpic.row
+		}
+
+		path.head = {
+			...placeholderEndpoint
+		};
+
+		path.tail = {
+			...placeholderEndpoint
+		};
+
+		debugger;
+
 
 		// NOTE -> again this function should just return the intermediatePathObject
 
@@ -242,24 +283,24 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 	 * @param {number} id Epic Id
 	 * @returns 
 	 */
-	const finaliseIntermediatePath = (id) => {
+	const finaliseIntermediatePath = (rawEpicId) => {
 		if (state.intermediate.path === undefined)
 			return;
 
 		// debugger;
-		if (id === undefined) {
+		if (rawEpicId === undefined) {
 			dispatch({type: "REMOVE_INTERMEDIATE_PATH"});
 			return;
 		}
 
 
-		const k1 = state.intermediate.path.raw;
-		const k2 = state.intermediate.path.raw === "from" ? "to" : "from";
+		const rawEpicKey = state.intermediate.path.rawEndpoint === PATH_ENDPOINT.HEAD ? "from" : "to";
+		const originEpicKey = rawEpicKey === "from" ? "to" : "from";
 		
 		const p = {
 			id: getId__(),
-			[k2]: state.intermediate.path[k1 + "Id"],
-			[k1]: id
+			[originEpicKey]: state.intermediate.path.originEpicId,
+			[rawEpicKey]: rawEpicId
 		}
 
 		// NOTE -> again this function should return the path object
@@ -268,97 +309,58 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 		dispatch({type: "CREATE_NEW_PATH", path: p});
 	}
 
-	/**
-	 * 
-	 * @param {{x: number, y: number}} pos 
-	 */
-	const drawPath = (pos) => {
+	const drawPath = (targetDate, row) => {
 		if (state.intermediate.path === undefined)
 			return;
 
-		// convert the pixels into grid
-		const gridPos = pixelToGridBasedPos__(
-			pos,
-			canvasSize,
-			numOfUnits );
+		const newPathX = differenceInDays(targetDate, startDate);
+		const rawEndpoint = state.intermediate.path.rawEndpoint;
+		const currentPathX =  state.intermediate.path[rawEndpoint].x;
 
-		const newStartDate = add(startDate, {days: gridPos.x});
-		const newEndDate = add(startDate, {days: gridPos.x + 1});
-
+		if (currentPathX === newPathX)
+			return;
 
 		const patch = {
-			startDate: newStartDate,
-			endDate: newEndDate,
-			row: gridPos.y
+			x: newPathX,
+			y: row
 		};
 
-		// NOTE -> again this function should return patch for intermediate path
-
-		const d = differenceInDays(newStartDate, state.intermediate.path[state.intermediate.path.raw].startDate);
-		// NOTE -> update local state
-		if (d !== 0) {
-			dispatch({type: "PATCH_INTERMEDIATE_PATH_RAW", patch});
-		}		
+		dispatch({type: "PATCH_INTERMEDIATE_PATH", patch});
 	}
 
-	const moveEpic = (customEvent, pos) => {
-		const epic = state.epics[customEvent.epicId];
-		const gridPos = pixelToGridBasedPos__(pos, canvasSize, numOfUnits);
-		const newStartDate = add(startDate, {days: gridPos.x});
+	const moveEpic = (epicId, targetDate) => {
+		const epic = state.epics[epicId];
+
+		if (targetDate.isEqual(epic.startDate)) {
+			return;
+		}
+
 		const widthInDays = differenceInDays(epic.endDate, epic.startDate);
 
-		const newEndDate = add(startDate, {days: gridPos.x + widthInDays});
+		const newEndDate = add(targetDate, {days: widthInDays});
 
-		// if new end date is greater than the end date of the canvas, then increase the size of the canvas to embody the new epic
-		const d2 = differenceInDays(newEndDate, endDate);
-		if (d2 >= 0) {
-			increaseCanvasSizeBy(d2 + 1);
+		if (shouldExtendCanvas(newEndDate, endDate)) {
+			increaseCanvasSizeBy(1);
 		}
 
-		//debugger;
-
-		//NOTE -> eventhough the current epic state could be intermediate, we will update it over API
-		const diff = differenceInDays(newStartDate, epic.startDate);
-
-		if (diff !== 0) {
-			dispatch({type: "UPDATE_EPIC", id: epic.id, patch: {startDate: newStartDate, endDate: newEndDate}})
-		}
+		dispatch({type: "UPDATE_EPIC", id: epicId, patch: {startDate: targetDate, endDate: newEndDate}})
 	}
 
-	/**
-	 * 
-	 * @param {{epicId: number, isLeftHandle: boolean}} customEvent 
-	 * @param {{x: number, y: number}} pos 
-	 * @returns 
-	 */
-	const resizeEpic = (customEvent, pos) => {
-		const epic = state.epics[customEvent.epicId]
 
-		const newGridPos = pixelToGridBasedPos__({x: pos.x, y: pos.y}, canvasSize, numOfUnits, true);
+	const resizeEpic = (epicId, face, targetDate) => {
+		const epic = state.epics[epicId];
 
-		const newDate = add(startDate, {days: newGridPos.x});
-
-
-		// difference between newDate and last "endDate"
-		if (customEvent.isLeftHandle) {
-			if (differenceInDays(epic.startDate, newDate) === 0) return;
-			if (differenceInDays(newDate, epic.endDate) >= 0) return;
-		}
-		else {
-			if (differenceInDays(newDate, epic.endDate) === 0) return;
-			if (differenceInDays(newDate, epic.startDate) <= 0) return;
+		if (targetDate.isEqual(epic.startDate) || targetDate.isEqual(epic.endDate)) {
+			return;
 		}
 
-		let d3 = differenceInDays(newDate, endDate);
-		if (d3 >= 0) {
-			increaseCanvasSizeBy(d3 + 1);
+		if (shouldExtendCanvas(targetDate, endDate)) {
+			increaseCanvasSizeBy(1);
 		}
-
-		//debugger;
 
 		dispatch({type: "UPDATE_EPIC", id: epic.id, patch: {
-			startDate: customEvent.isLeftHandle ? newDate : epic.startDate,
-			endDate: !customEvent.isLeftHandle ? newDate : epic.endDate
+			startDate: face === EPIC_FACE.START ? targetDate : epic.startDate,
+			endDate: face === EPIC_FACE.END ? targetDate : epic.endDate
 		}})
 	}
 
@@ -371,6 +373,7 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 
 
 		const pos = {x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY};
+		const gridPos = pixelToGridBasedPos__(pos, canvasSize, numOfUnits);
 
 
 		// position is always relative to interactive-layer
@@ -379,15 +382,17 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 			pos.y += e.target.offsetTop;
 		}
 
+		const targetDate = gridToDate(startDate, gridPos.x);
+
 		switch(dragData.current.type) {
 			case "DRAW_PATH":
-				drawPath(pos);
+				drawPath(targetDate, gridPos.y);
 				break;
 			case "MOVE_EPIC":
-				moveEpic(dragData.current, pos);
+				moveEpic(dragData.current.epicId, targetDate);
 				break;
 			case "RESIZE_EPIC":
-				resizeEpic(dragData.current, pos);
+				resizeEpic(dragData.current.epicId, dragData.current.face, targetDate);
 				break;
 			// default:
 			// 	throw new Error(`Unknown drag event type: ${dragData.current.type}`);
@@ -398,7 +403,7 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 	const drop = (e) => {
 		e.preventDefault();
 
-		if (e.target.className !== "epic" && e.target.className !== "interactive-layer") {
+		if (e.target.className !== EPIC_CLASS_NAME && e.target.className !== INTERACTIVE_LAYER_CLASS_NAME) {
 			return;
 		}
 
@@ -406,6 +411,10 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 			case "DRAW_PATH":
 				finaliseIntermediatePath(dragData.current.rawId);
 				break;
+			case Helper.dragEvents.moveEpic: 
+				// make update call over API
+				// 
+			break;
 		}
 	}	
 
@@ -439,7 +448,7 @@ const Canvas = ({rows, startDate, endDate, increaseCanvasSizeBy}) => {
 							to={state.epics[x.to]}
 							id={id} />
 					})}
-					{state.intermediate.path !== undefined && <Path {...state.intermediate.path} canvas={{startDate}} />}
+					{state.intermediate.path !== undefined && <Path path={state.intermediate.path} canvas={{startDate}} />}
 				</svg>
 
 				<div 

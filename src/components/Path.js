@@ -2,7 +2,6 @@ import { differenceInDays } from "date-fns";
 import { gridToPixelBasedPos__ } from "../canvasHelper";
 import { BASE_NODE_DIMENSIONS } from "../enums";
 
-
 /**
  * 
  * @param {{x: number, y: number}} from 
@@ -24,31 +23,36 @@ const generatePathString__ = (from, to, c) => {
 	return `M${from.x} ${from.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${to.x} ${to.y}`;
 }
 
-const Path = ({id, from, to, canvas}) => {
+const Path = ({id, from, to, path, canvas}) => {
 
-	const calcPathD = () => {
-		const startGridPos = {
+	const makePath = (from, to) => {
+		const head = {
 			x: differenceInDays(from.endDate, canvas.startDate),
 			y: from.row
 		}
 	
-		const endGridPos = {
+		const tail = {
 			x: differenceInDays(to.startDate, canvas.startDate),
 			y: to.row
 		}
 
-		const p1 = gridToPixelBasedPos__(startGridPos, BASE_NODE_DIMENSIONS);
+		return {
+			head, tail
+		}
+	}
+
+	const calcPathD = (path) => {
+		const p1 = gridToPixelBasedPos__(path.head, BASE_NODE_DIMENSIONS);
 		p1.y += BASE_NODE_DIMENSIONS.height / 2;
 
-		const p2 = gridToPixelBasedPos__(endGridPos, BASE_NODE_DIMENSIONS);
+		const p2 = gridToPixelBasedPos__(path.tail, BASE_NODE_DIMENSIONS);
 		p2.y += BASE_NODE_DIMENSIONS.height / 2;
 
 		return generatePathString__(p1, p2, {x: BASE_NODE_DIMENSIONS.width, y: 0})
 	}
 
 
-	// convert dates to pixel
-	const pathD = calcPathD();
+	const pathD = calcPathD(path !== undefined ? path : makePath(from, to));
 
 	return (
 		<path d={pathD} 

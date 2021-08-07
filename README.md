@@ -19,7 +19,12 @@
 - Phase 2 - Dragging
 	- 
 
+## Custom Drag Events
+| type | props |
+| ---- | ----- |
+| `MOVE_EPIC` | `epicId` |
 
 
 ## Notes
 - uncomitted - Changes are local.
+- When manipulating epic locally and some user make changes 

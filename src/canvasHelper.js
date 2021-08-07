@@ -32,3 +32,19 @@ export const pixelToGridBasedPos__ = (pos, canvasDimensions, totalGrids) => {
 	}
 }
 
+/**
+ * Generates a string representing smooth brezier curve for Svg->Path("d" attribute) element.
+ */
+export const generatePathD = (head, tail, controlPoint) => {
+	const controlPoint1 = {
+		x: head.x + controlPoint.x,
+		y: head.y + controlPoint.y
+	}
+
+	const controlPoint2 = {
+		x: tail.x - controlPoint.x,
+		y: tail.y - controlPoint.y
+	}
+
+	return `M${head.x} ${head.y} C${controlPoint1.x} ${controlPoint1.y} ${controlPoint2.x} ${controlPoint2.y} ${tail.x} ${tail.y}`;
+}
